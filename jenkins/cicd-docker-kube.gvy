@@ -4,14 +4,14 @@ pipeline {
         stage('compile') {
 	   steps {
                 echo 'compiling..'
-		git url: 'https://github.com/lerndevops/DevOpsClassCodes'
-		sh script: '/opt/apache-maven-3.8.1/bin/mvn compile'
+		git url: 'https://github.com/lerndevops/samplejavaapp'
+		sh script: '/opt/maven/bin/mvn compile'
            }
         }
         stage('codereview-pmd') {
 	   steps {
                 echo 'codereview..'
-		sh script: '/opt/apache-maven-3.8.1/bin/mvn -P metrics pmd:pmd'
+		sh script: '/opt/maven/bin/mvn -P metrics pmd:pmd'
            }
 	   post {
                success {
@@ -22,7 +22,7 @@ pipeline {
         stage('unit-test') {
 	   steps {
                 echo 'unittest..'
-	        sh script: '/opt/apache-maven-3.8.1/bin/mvn test'
+	        sh script: '/opt/maven/bin/mvn test'
                  }
 	   post {
                success {
@@ -30,10 +30,10 @@ pipeline {
                }
            }			
         }
-        stage('codecoverate') {
+        stage('codecoverage') {
 	   steps {
                 echo 'codecoverage..'
-		sh script: '/opt/apache-maven-3.8.1/bin/mvn cobertura:cobertura -Dcobertura.report.format=xml'
+		sh script: '/opt/maven/bin/mvn cobertura:cobertura -Dcobertura.report.format=xml'
            }
 	   post {
                success {
@@ -43,9 +43,34 @@ pipeline {
         }
         stage('package') {
 	   steps {
-                echo 'package..'
-		sh script: '/opt/apache-maven-3.8.1/bin/mvn package'	
+                echo 'package......'
+		sh script: '/opt/maven/bin/mvn package'	
            }		
         }
+        stage('build docker image') {
+	   steps {
+	        sh 'cd $WORKSPACE'
+		sh 'docker build --file Dockerfile --tag lerndevops/samplejavaapp:$BUILD_NUMBER .'
+            }	
+        }
+        stage('push docker image') {
+	   steps {
+		withCredentials([string(credentialsId: 'DOCKER_HUB_PWD', variable: 'DOCKER_HUB_PWD')]) {
+                	sh "docker login -u lerndevops -p ${DOCKER_HUB_PWD}"
+			}
+		sh 'docker push lerndevops/samplejavaapp:$BUILD_NUMBER'
+		}
+        }
+        stage('Deploy to K8s') {
+  	   steps {
+    		sh 'sed -i "s/bno/"$BUILD_NUMBER"/g" deploy/sampleapp-deploy-k8s.yml'
+    		sh 'kubectl apply -f deploy/sampleapp-deploy-k8s.yml'
+	   }
+	   post { 
+              always { 
+                cleanWs() 
+	      }
+	   }
+	}   
     }
-}
+
